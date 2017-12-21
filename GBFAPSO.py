@@ -80,6 +80,7 @@ def GenerateRandVel(list):
 
 def getUpQ():
     # 每个交叉口协调相位的上行流量 l/s
+    # read file
     return [0.8,0.8,0.65,0.7
         ,0.7,0.3,0.5]
 
