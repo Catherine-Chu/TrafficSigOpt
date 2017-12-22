@@ -48,6 +48,20 @@ TL = 1  # 每个T值下的迭代次数为TL
 
 ans = 0  # 最后求的的全局最优解
 
+'''文件读写'''
+fr1=open("./result.txt","r")
+fr2=open("./result2.txt","r")
+
+g_upQ = []
+g_downQ = []
+g_dist = [637.789591088,428.654872829,399.577902292,814.455991752,978.273287482,900.826634264]
+g_upV = []
+g_upmaxv = 0
+g_downV = []
+g_downmaxv = 0
+g_fullQ = []
+g_Q = []
+
 ''' initial all Scales' pos,speed '''
 
 
@@ -77,22 +91,52 @@ def GenerateRandVel(list):
   首先针对单个交叉口计算
   之后根据干线协调控制原理重新调整周期与相位时长
 '''
+def readFiles():
+    xp=0
+    yp=0
+    f1_lines=fr1.readlines()
+    for line in f1_lines:
+        if(line.isdigit()):
+            xp=int(line)
+            g_fullQ.append([])
+            g_Q.append([])
+        else:
+            tmp=line.split()
+            yp=tmp[0]
+            g_fullQ[xp].append(tmp[2])
+            g_Q[xp].append(tmp[1])
+    f2_lines=fr2.readlines()
+    for line in f2_lines:
+        if(line.isdigit()):
+            xp=int(line)
+            yp=0
+        else:
+            tmp=line.split()
+            if(yp==0):
+                '''up'''
+                g_upQ.append(tmp[1])
+                g_upV.append(tmp[2])
+            else:
+                '''down'''
+                g_downQ.append(tmp[1])
+                g_downV.append(tmp[2])
+    g_upmaxv=max(g_upV)
+    g_downmaxv=max(g_downV)
 
 def getUpQ():
     # 每个交叉口协调相位的上行流量 l/s
     # read file
-    return [0.8,0.8,0.65,0.7
-        ,0.7,0.3,0.5]
+    return g_upQ
 
 
 def getDownQ():
     # 每个交叉口协调相位的下行流量 l/s
-    return [0.75,0.8,0.85,0.8,0.4,0.4,0.5]
+    return g_downQ
 
 
 def getDist():
     # 相邻两个交叉口之间的距离 m
-    return [150,200,250,200,140.5,180.8,200.0]
+    return g_dist
 
 
 def getUpV():
@@ -101,7 +145,7 @@ def getUpV():
     # 后续实现中Vup是认为为一个值，也就是最大速度/平均速度
     # 如果要为每一段的速度哦相应代码需要更改
     # return [11.1,8.3,5.5,6.0,6.5,8.3,12]
-    return 8.24
+    return g_upmaxv
 
 
 def getDownV():
@@ -110,17 +154,17 @@ def getDownV():
     # 后续实现中Vdown是认为为一个值，也就是最大速度
     # 如果要为每一段的速度相应代码需要更改
     # return [11.1,8.3,5.5,6.0,6.5,8.3,12]
-    return 8.24
+    return g_downmaxv
 
 
 def getFullQ():
     # 每个交叉口每个相位的饱和流量 l/s
-    return [[1,1.8,1,0.6],[1.2,1.9,0.9,0.9],[0.7,1.75,0.8],[0.6,1.6,0.8,0.5,0.6],[1.1,1.6,0.8],[0.7,1.2,0.75,0.8],[0.8,1.4,1]]
+    return g_fullQ
 
 
 def getQ():
     # 每个交叉口每个相位的实际流量 l/s
-    return [[0.8,1.55,0.9,0.4],[1,1.6,0.4,0.7],[0.2,1.5,0.5],[0.1,1.5,0.4,0.1,0.3],[1,1.1,0.4],[0.1,0.7,0.2,0.4],[0.6,1,0.5]]
+    return g_Q
 
 
 def getAbility(C,fulQ, lamda):
@@ -129,7 +173,6 @@ def getAbility(C,fulQ, lamda):
     for i in range(n):
         # Ai.append(fulQ[i][1] * lamda[i][1])
         Ai.append(fulQ[i][1])
-
     return Ai
 
 
@@ -490,6 +533,7 @@ def FSAO():
     return tbest
 
 if __name__ == '__main__':
+    readFiles()
     ''' initial data structure '''
     for i in range(Scales):
         pos.append([])
@@ -542,3 +586,5 @@ if __name__ == '__main__':
     plt.title('Fitness-Turn diagram')
     plt.legend()
     plt.show()
+    fr1.close()
+    fr2.close()
