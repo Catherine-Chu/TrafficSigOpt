@@ -4,6 +4,7 @@ import copy
 import math
 import numpy
 import matplotlib.pyplot as plt
+import sys
 
 '''道路相关约束参数'''
 n = 7  # 交叉口数目
@@ -13,8 +14,10 @@ xcount = 2 * n  # 1（C）+交叉口数目（协调相位绿信比）+交叉口�
 
 minPhase = [[35,35,8,10],[8,35,8,35],[10,35,35],[10,35,10,8,35],[10,35,35],[10,35,10,35],[10,35,35]] # 最小相位时长
 minOth = [53,51,45,63,45,55,45] # 非协调相位最小相位总时长
-basePhase = [[9,43,37,111],[28,121,13,38],[28,134,38],[34,75,31,19,41],[48,89,63],[35,67,52,46],[37,111,9,43]]
-basePhaseDiff = [38,0,6,138,158,142] # 基准配时相位差方案
+basePhase = [[37,111,9,43],[28,121,13,38],[28,134,38],[34,75,31,19,41],[48,89,63],[35,67,52,46],[37,111,9,43]]
+basePhaseDiff = [47,0,0,124,171,147] # 基准配时相位差方案
+basePhase1 = [[40,120,10,30],[20,130,10,40],[20,140,40],[20,100,20,14,46],[40,100,60],[30,100,20,50],[28,112,60]]
+basePhaseDiff1 = [55,0,199,123,171,177]
 minCommonC = 98 # 最小周期时长
 maxCommonC = 300 # 最大周期时长
 minPhaseDiff = 0 # 最小相邻相位差(始终取正值）
@@ -26,7 +29,7 @@ maxPhaseDiff = maxCommonC # 最大相邻相位差
 maxTurns = 500  # 最大迭代次数
 EndCount = 0  # 连续迭代多次没有出现更优结果
 
-Scales = 100  # 微粒群种群规模(N)
+Scales = 200  # 微粒群种群规模(N)
 pos = []  # 每个微粒当前位置的集合
 speed = []  # 每个微粒当前速度的集合
 pbest = []  # 每个微粒自身最优历史位置的集合
@@ -39,9 +42,9 @@ r2 = random.uniform(0, 1)  # 0-1均匀分布随机数(用来保证种群多样�
 
 
 '''退火迭代参数'''
-T0 = 0.001  # 初始温度
-T_min = 0.0005  # 冷却条件
-cl = 0.98  # 冷却系数
+T0 = 0.1  # 初始温度
+T_min = 0.06  # 冷却条件
+cl = 0.99  # 冷却系数
 cf = 0.02  # 快速冷却系数
 TL = 1  # 每个T值下的迭代次数为TL
 
@@ -49,8 +52,9 @@ TL = 1  # 每个T值下的迭代次数为TL
 ans = 0  # 最后求的的全局最优解
 
 '''文件读写'''
-fr1=open("./result.txt","r")
-fr2=open("./result2.txt","r")
+fr1=open("./input/result.txt","r")
+fr2=open("./input/result2.txt","r")
+fw1=open("./ans.txt","w")
 
 g_upQ = []
 g_downQ = []
@@ -72,6 +76,13 @@ def GenerateBase(plist):
     for i in range(n-1):
         plist.append(basePhaseDiff[i])
 
+def GenerateBase1(plist):
+    plist.append(200)
+    for i in range(n):
+        plist.append(basePhase1[i][1]/float(plist[0]))
+    for i in range(n-1):
+        plist.append(basePhaseDiff1[i])
+
 def GenerateRandPos(list):
     list.append(random.randint(minCommonC,maxCommonC))
     tempC=list[0]
@@ -92,21 +103,36 @@ def GenerateRandVel(list):
   之后根据干线协调控制原理重新调整周期与相位时长
 '''
 def readFiles():
+    global g_upmaxv,g_downmaxv
     xp=0
     yp=0
     f1_lines=fr1.readlines()
     for line in f1_lines:
+        line=line.strip()
         if(line.isdigit()):
             xp=int(line)
             g_fullQ.append([])
             g_Q.append([])
         else:
             tmp=line.split()
-            yp=tmp[0]
-            g_fullQ[xp].append(tmp[2])
-            g_Q[xp].append(tmp[1])
+            yp=int(tmp[0])
+            g_fullQ[xp].append(float(tmp[2]))
+            g_Q[xp].append(float(tmp[1]))
+
+    '''调整第一个路口相位的特殊性'''
+    pos =len(g_Q[0]) - 1
+    tmp1=g_Q[0][pos]
+    tmp2=g_fullQ[0][pos]
+    while pos>0:
+        g_Q[0][pos]=g_Q[0][pos-1]
+        g_fullQ[0][pos]=g_fullQ[0][pos-1]
+        pos-=1
+    g_Q[0][0]=tmp1
+    g_fullQ[0][0]=tmp2
+
     f2_lines=fr2.readlines()
     for line in f2_lines:
+        line=line.strip()
         if(line.isdigit()):
             xp=int(line)
             yp=0
@@ -114,14 +140,17 @@ def readFiles():
             tmp=line.split()
             if(yp==0):
                 '''up'''
-                g_upQ.append(tmp[1])
-                g_upV.append(tmp[2])
+                g_upQ.append(float(tmp[1]))
+                g_upV.append(float(tmp[2]))
+                yp=1
             else:
                 '''down'''
-                g_downQ.append(tmp[1])
-                g_downV.append(tmp[2])
+                g_downQ.append(float(tmp[1]))
+                g_downV.append(float(tmp[2]))
+                yp=0
     g_upmaxv=max(g_upV)
     g_downmaxv=max(g_downV)
+
 
 def getUpQ():
     # 每个交叉口协调相位的上行流量 l/s
@@ -262,6 +291,19 @@ def calOthPhase(C, q, lamda, Muik):
                              + Muik[i][k] * Muik[i][k] / (2 * (1 - Muik[i][k])))
     return sum
 
+def calCoPhase1(C,lamda,q,fulQ):
+    sum = 0
+    for i in range(n):
+        sum += C * pow((1.0 - lamda[i][1]),2) / (2*(1.0 - q[i][1] / fulQ[i][1]))
+    return sum
+
+def calOthPhase1(C,lamda,q,fulQ):
+    sum = 0
+    for i in range(n):
+        for k in range(block[i]):
+            if k != 1:
+                sum += C * pow((1.0 - lamda[i][k]), 2) / (2*(1.0 - q[i][k] / fulQ[i][k]))
+    return sum
 
 def calCoStops(lamda, q, fulQ):
     sum = 0
@@ -335,15 +377,33 @@ def CalFitness(list,isp=False):
 
     return answer
 
+def CalFitness1(list):
+    q = getQ()
+    lamda = getLamda(list, q)
+
+    fulQ = getFullQ()
+
+    o1 = 0.6  # [0,1],衡量主次干道(协调/非协调)分配,0:只考虑非协调相位,1:只考虑协调相位
+
+    Delay = o1 * calCoPhase1(list[0],lamda, q, fulQ) + (1 - o1) * calOthPhase1(list[0],lamda, q, fulQ)
+
+    Stops = o1 * calCoStops(lamda, q, fulQ) + (1 - o1) * calOthStops(lamda, q, fulQ)
+
+    answer = 1000 / (Delay + 10 * Stops)
+
+    return answer
+
 
 ''' calculate gbest '''
 
 
 def FindSwarmsMostPos():
     best = CalFitness(pbest[0])
+    # best = CalFitness1(pbest[0])
     index = 0
     for i in range(Scales-1):
         temp = CalFitness(pbest[i+1])
+        # temp = CalFitness1(pbest[i+1])
         if temp > best:
             best = temp
             index = i
@@ -398,10 +458,12 @@ def UpdatePos():
     for i in range(Scales):
         VecAddVec(pos[i], speed[i])
         checkPos(pos[i])
-        if CalFitness(pos[i]) > CalFitness(pbest[i]):
+        if CalFitness(pos[i]) < CalFitness(pbest[i]):
+        # if CalFitness(pos[i]) > CalFitness(pbest[i]):
+        # if CalFitness1(pos[i]) > CalFitness1(pbest[i]):
             pbest[i] = copy.deepcopy(pos[i])
     gbest = FindSwarmsMostPos()
-    gbest = SAO()
+    # gbest = SAO()
 
 def checkSpeed(list):
     # 需要满足speed不大于pos允许搜索的区间宽度，不小于负的区间宽度
@@ -487,7 +549,9 @@ def SAO():
     while T > T_min:
         for i in range(TL):
             df=CalFitness(nbest)-CalFitness(tbest)
-            if df > 0:
+            # df=CalFitness1(nbest)-CalFitness1(tbest)
+            # if df > 0:
+            if df < 0:
                 tbest = copy.deepcopy(nbest)
             else:
                 r = random.uniform(0, 1)
@@ -509,16 +573,20 @@ def FSAO():
 
         for i in range(TL):
             df = CalFitness(nbest) - CalFitness(tbest)
+            # df = CalFitness1(nbest) - CalFitness1(tbest)
+            # if df > 0:
             if df > 0:
                 tbest = copy.deepcopy(nbest)
             else:
-                if math.exp(df / T) > random(0, 1):
+                if math.exp(df / T) > random.uniform(0, 1):
                     tbest = copy.deepcopy(nbest)
             nbest = RandUpdateGbest()
 
         ddf = CalFitness(tbest) - CalFitness(temp)
+        # ddf = CalFitness1(tbest) - CalFitness1(temp)
 
-        if ddf <= 0:
+        # if ddf <= 0:
+        if ddf >= 0:
             cnt += 1
         else:
             cnt = 0
@@ -541,20 +609,44 @@ if __name__ == '__main__':
         pbest.append([])
 
     ''' initial swarm first generation '''
-    for i in range(Scales-1):
+    a_s=int(Scales/2)
+    b_s=int(Scales/4)
+    c_s=Scales-a_s-b_s
+    for i in range(a_s):
         GenerateRandPos(pos[i])
         GenerateRandVel(speed[i])
         pbest[i] = copy.deepcopy(pos[i])
+    for i in range(b_s):
+        GenerateBase(pos[a_s+i])
+        GenerateRandVel(speed[a_s+i])
+        pbest[a_s+i] = copy.deepcopy(pos[a_s+i])
+    for i in range(c_s):
+        GenerateBase1(pos[a_s+b_s+i])
+        GenerateRandVel(speed[a_s+b_s+i])
+        pbest[a_s+b_s+i] = copy.deepcopy(pos[a_s+b_s+i])
 
-    GenerateBase(pos[Scales-1])
-    GenerateRandVel(speed[Scales-1])
-    pbest[Scales-1] = copy.deepcopy(pos[Scales-1])
-
-
+    # gbest0=[200,0.735,0.72,0.775,0.68,0.775,0.725,0.74,106,109,93,108,108,106]
+    # gbest1=[]
+    # GenerateBase(gbest1)
+    # gbest2=[]
+    # GenerateBase1(gbest2)
+    # gbest3=[98,0.4489796,0.4285714,0.5408163,0.3571429,0.5408163,0.3571429,0.4693878,50,73,74,64,72,44]
+    # ans0 = CalFitness(gbest0)
+    # ans1 = CalFitness1(gbest0)
+    # ans2 = CalFitness(gbest1)
+    # ans3 = CalFitness1(gbest1)
+    # ans4 = CalFitness(gbest2)
+    # ans5 = CalFitness1(gbest2)
+    # ans6 = CalFitness(gbest3)
+    # ans7 = CalFitness1(gbest3)
+    # print("ans0:%f,ans1:%f,1.4592"%(ans0,ans1))
+    # print("ans6:%f,ans7:%f,1.7214" % (ans6, ans7))
+    # print("ans4:%f,ans5:%f,2.7813"%(ans4,ans5))
+    # print("ans2:%f,ans3:%f,2.9856" % (ans2, ans3))
     gbest = FindSwarmsMostPos()
-    # ans = CalFitness(gbest)
-    gbest = SAO()
+    # gbest = SAO()
     ans = CalFitness(gbest)
+    # ans = CalFitness1(gbest)
 
     turns = []
     fitness = []
@@ -563,12 +655,15 @@ if __name__ == '__main__':
     for i in range(maxTurns):
         turns.append(i+1)
         fitness.append(ans)
-        print('Turns: %d, Fitness: %f.\n'%((i+1),ans))
-
+        print('Turns: %d'%(i+1))
+        fw1.write('Turns: %d, Fitness: %f.\n'%((i+1),ans))
+        fw1.write(','.join(str(i) for i in gbest))
+        fw1.write('\n')
         UpdateSpeed()
         UpdatePos()
         cur_ans = CalFitness(gbest)
-        if (cur_ans > ans):
+        # cur_ans = CalFitness1(gbest)
+        if (cur_ans < ans):
             ans = cur_ans
             EndCount = 0
             continue
@@ -588,3 +683,6 @@ if __name__ == '__main__':
     plt.show()
     fr1.close()
     fr2.close()
+    fw1.flush()
+    fw1.close()
+    sys.exit(0)

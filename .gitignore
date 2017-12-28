@@ -1,1 +1,6 @@
 .idea/
+ans/
+result/
+ans*.txt
+Figure_*.png
+dataProcess/*.txt
